@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from .models import APIRequestLog
+from .serializers import APIRequestLogSerializer
 
 from datetime import date
 from datetime import timedelta
@@ -22,6 +23,7 @@ class APIRequestList(APIView):
         The total number of countable requests made to Compile API for each path
     '''
     model = APIRequestLog
+    serializer_class = APIRequestLogSerializer
 
     def get_queryset(self):
         qs = self.model._default_manager.all()
@@ -51,7 +53,8 @@ class APIRequestList(APIView):
     def get(self, request, *args, **kwargs):
         qs = self.get_queryset()
         today = date.today()
-        return Response({
+        data = {
                 'current': qs.filter(requested_at__range=self.get_window(today, 0)).count(),
                 'previous': qs.filter(requested_at__range=self.get_window(today, -1)).count()
-            })
+                }
+        return Response(APIRequestLogSerializer(data).data)
