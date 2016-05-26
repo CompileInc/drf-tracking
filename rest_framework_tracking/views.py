@@ -8,6 +8,7 @@ from django.utils.module_loading import import_string
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .mixins import LoggingMixin
 from .models import APIRequestLog
 from .serializers import APIRequestLogSerializer
 
@@ -66,19 +67,35 @@ class APIRequestList(APIView):
 
         return root_urlconf
 
-    def _is_drf_view(self, pattern):
-        return hasattr(pattern.callback, 'cls') and issubclass(pattern.callback.cls, APIView)
+    def _is_drf_trakcing__view(self, pattern):
+        return hasattr(pattern.callback, 'cls') and issubclass(pattern.callback.cls, APIView)\
+               and issubclass(pattern.callback.cls, LoggingMixin)
 
     def _is_format_endpoint(self, pattern):
         return '?P<format>' in pattern._regex
+
+    def get_pattern_path(self, pattern, parent_pattern=None):
+        if parent_pattern:
+            name_parent = simplify_regex(parent_pattern.regex.pattern).strip('/')
+            return "/{0}{1}".format(name_parent, simplify_regex(pattern.regex.pattern))
+        return simplify_regex(pattern.regex.pattern)
+
+    def get_pattern_regex_pattern(self, pattern, parent_pattern=None):
+        if parent_pattern:
+            return r"{0}{1}".format(parent_pattern.regex.pattern,
+                                    pattern.regex.pattern)
+        return pattern.regex.pattern
 
     def get_all_regex_patterns(self, urlpatterns, parent_pattern=None):
         for pattern in urlpatterns:
             if isinstance(pattern, RegexURLResolver):
                 parent_pattern = None if pattern._regex == "^" else pattern
                 self.get_all_regex_patterns(urlpatterns=pattern.url_patterns, parent_pattern=parent_pattern)
-            elif isinstance(pattern, RegexURLPattern) and self._is_drf_view(pattern) and not self._is_format_endpoint(pattern):
-                self.url_patterns.append(pattern.regex)
+            elif isinstance(pattern, RegexURLPattern) and self._is_drf_trakcing__view(pattern) \
+                 and not self._is_format_endpoint(pattern):
+                url = {'path': self.get_pattern_path(pattern, parent_pattern),
+                       'regex': self.get_pattern_regex_pattern(pattern, parent_pattern)}
+                self.url_patterns.append(url)
 
     def get_urlconf_patterns(self):
         root_urlconf = self.get_urlconf()
@@ -94,19 +111,24 @@ class APIRequestList(APIView):
     def get_path_counts(self, patterns, qs):
         counts = {}
         for regex in patterns:
-            counts[regex.pattern] = qs.filter(path__regex=simplify_regex(regex.pattern)).count()
+            counts[regex['path']] = qs.filter(path__regex=simplify_regex(regex['regex'])).count()
         return counts
 
     def get(self, request, *args, **kwargs):
         patterns = self.get_urlconf_patterns()
+        print patterns
         qs = self.get_queryset()
 
         today = date.today()
-        current_qs = qs.filter(requested_at__range=self.get_window(today, 0))
-        previous_qs = qs.filter(requested_at__range=self.get_window(today, -1))
+        current_window = self.get_window(today, 0)
+        previous_window = self.get_window(today, -1)
+        current_qs = qs.filter(requested_at__range=current_window)
+        previous_qs = qs.filter(requested_at__range=previous_window)
 
-        current = self.get_path_counts(patterns, current_qs)
-        previous = self.get_path_counts(patterns, previous_qs)
+        current = {'usage': self.get_path_counts(patterns, current_qs),
+                   'window': current_window}
+        previous = {'usage': self.get_path_counts(patterns, previous_qs),
+                    'window': previous_window}
 
         data = {
                 'current': current,
