@@ -20,6 +20,7 @@ import re
 
 FILTER_CURRENT_HOST = getattr(settings, 'DRF_TRACKING_USAGE_CURRENT_SITE', True)
 FILTER_USAGE_METHOD = getattr(settings, 'DRF_TRACKING_USAGE_METHOD', [])
+FILTER_RESPONSE_CODES = getattr(settings, 'DRF_TRACKING_RESPONSE_CODES', [])
 
 class APIRequestList(APIView):
     '''
@@ -42,6 +43,9 @@ class APIRequestList(APIView):
 
         if FILTER_USAGE_METHOD not in EMPTY_VALUES:
             qs = qs.filter(method__in=FILTER_USAGE_METHOD)
+
+        if FILTER_RESPONSE_CODES not in EMPTY_VALUES:
+            qs = qs.filter(status_code__in=FILTER_RESPONSE_CODES)
 
         return qs
 
@@ -116,7 +120,6 @@ class APIRequestList(APIView):
 
     def get(self, request, *args, **kwargs):
         patterns = self.get_urlconf_patterns()
-        print patterns
         qs = self.get_queryset()
 
         today = date.today()
