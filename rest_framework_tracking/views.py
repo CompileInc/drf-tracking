@@ -12,10 +12,11 @@ from .mixins import LoggingMixin
 from .models import APIRequestLog
 from .serializers import APIRequestLogSerializer
 
+import re
+import copy
 from datetime import date
 from datetime import timedelta
 from importlib import import_module
-import re
 
 
 FILTER_CURRENT_HOST = getattr(settings, 'DRF_TRACKING_USAGE_CURRENT_SITE', True)
@@ -115,7 +116,10 @@ class APIRequestList(APIView):
     def get_path_counts(self, patterns, qs):
         counts = {}
         for regex in patterns:
-            counts[regex['path']] = qs.filter(path__regex=simplify_regex(regex['regex'])).count()
+            _regex = copy.deepcopy(regex['regex'])
+            _regex = simplify_regex(_regex)
+            _regex = re.sub('<.*?>', '.*', _regex, flags=re.DOTALL)
+            counts[regex['path']] = qs.filter(path__regex=_regex).count()
         return counts
 
     def get(self, request, *args, **kwargs):
