@@ -5,6 +5,7 @@ from django.core.urlresolvers import RegexURLResolver, RegexURLPattern
 from django.core.validators import EMPTY_VALUES
 from django.utils.module_loading import import_string
 
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,6 +17,7 @@ import re
 import copy
 from datetime import date
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 from importlib import import_module
 
 
@@ -32,6 +34,7 @@ class APIRequestList(APIView):
     '''
     model = APIRequestLog
     serializer_class = APIRequestLogSerializer
+    permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
         qs = self.model._default_manager.all()
@@ -56,8 +59,10 @@ class APIRequestList(APIView):
             index: 0 = current
             index: -1 = previous
         '''
-        start = date(today.year, today.month+index, 1)
-        end = date(today.year, start.month+1, 1) - timedelta(days=1)
+        start = date(today.year, today.month, 1)
+        if index == -1:
+            start = start + relativedelta(months=-1)
+        end = start + relativedelta(months=+1) - timedelta(days=1)
         return [start, end]
 
     def get_urlconf(self):
